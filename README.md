@@ -1,6 +1,5 @@
 The Unimaginative Mainframe Bruter/Screen Automation Tool
 =========================================================
-
 (I have not idea why this is displaying hinky, check out the raw)
 
 Tool to brute force APPLIDs on a z/OS mainframe where you can connect to VTAM
@@ -18,14 +17,12 @@ Dominic White @singe dominic () sensepost.com
 
 Usage
 -----
-
-Usage: mainframe_bruter.py [-h] -x TARGET [-t] [-v] [-c] [-s SLEEP]
-                           [-u USERFILE] [-p PASSFILE] [-a APPFILE]
-                           [-i TRANSFILE] [-m] [-e] [-q]
+Usage: mainframe_bruter.py [-h] -x TARGET [-t] [-v] [-c] [-s SLEEP] [-u USERFILE] [-p PASSFILE] [-a APPFILE] [-i TRANSFILE] [-m] [-e] [-q]
 
 z/OS Mainframe Bruteforcer
 
 optional arguments:
+
   -h, --help            show this help message and exit
   -x TARGET, --target TARGET
 						Target IP address or Hostname and port: TARGET[:PORT] default port is 23
@@ -51,6 +48,7 @@ Example
 -------
 
 ./mainframe_bruter.py -x my.mainframe.com:992 -v -a applids_quick.txt
+
 [+] z/OS Mainframe Bruteforcer
 [+] Target Acquired		: 74.168.206.164
 [+] APPLID Bruting		: Enabled
@@ -60,6 +58,7 @@ Example
 [+] ULTRA Hacker Movie Mode	: Disabled
 [+] Connecting to 74.168.206.164
 [+] Checking if in VTAM
+
 	[+] Starting APPLID Enumeration
 	[*] APPLID: TSO APPLID Found!
 	[*] MACRO: TSO MACRO Found!
@@ -68,6 +67,7 @@ Example
 	[!] MACRO: OVMS Invalid (bad response)
 	[!] MACRO: CICS Invalid (bad response)
 	[!] MACRO: IMS Invalid (bad response)
+
 [*] Found 3 valid APPLIDs:
 	APPLID -> TSO
 	MACRO -> TSO
@@ -109,6 +109,7 @@ usage: screenshotter.py [-h] -t TARGET [-s SLEEP] [-m] [-q]
 z/OS Mainframe Screenshotter
 
 optional arguments:
+
   -h, --help            show this help message and exit
   -t TARGET, --target TARGET
                         Target IP address or Hostname and port: TARGET[:PORT]
