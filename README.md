@@ -1,6 +1,5 @@
 The Unimaginative Mainframe Bruter/Screen Automation Tool
 =========================================================
-(I have not idea why this is displaying hinky, check out the raw)
 
 Tool to brute force APPLIDs on a z/OS mainframe where you can connect to VTAM
 Truthfully, it's just a useful way of automating mainframe screen interactions,
