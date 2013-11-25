@@ -1,0 +1,6 @@
+TSO
+!TSO
+!L CICS
+#PF(1)
+OVMS
+!MO
