@@ -18,6 +18,7 @@ import sys
 import argparse
 import re
 import platform
+from IPython import embed
 
 # Print output that can be surpressed by a CLI opt
 def whine(text, kind='clear', level=0):
@@ -78,13 +79,17 @@ def check_VTAM(em):
 	#Test command enabled in the session-level USS table ISTINCDT, should always work
 	em.send_string('IBMTEST')
 	em.send_enter()
+	time.sleep(results.sleep)
 	if not em.find_response( 'IBMECHO ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'):
-		for i in xrange(1,3):
-			time.sleep(results.sleep+i)
+		for i in xrange(1,5):
+			time.sleep(results.sleep+(i/10))
 			if em.find_response( 'IBMECHO ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'):
-				results.sleep += 1
-				whine('The host is slow, increasing delay by 1s to: ' + str(results.sleep),kind='warn')
+				results.sleep += 0.1
+				whine('The host is slow, increasing delay by 0.1s to: ' + str(results.sleep),kind='warn')
 				return True
+			else:
+				em.send_string('IBMTEST')
+				em.send_enter()
 		whine('Mainframe not in VTAM, aborting',kind='err')
 		check_CICS(em) #All may not be lost
 		return False
@@ -414,10 +419,10 @@ if results.movie_mode and not platform.system() == 'Windows':
 	em = WrappedEmulator(visible=True,delay=results.sleep)
 elif results.movie_mode and platform.system() == 'Windows':
 	whine('ULTRA Hacker Movie Mode not supported on Windows',kind='warn')
-	em = WrappedEmulator(delay=results.sleep)
+	em = WrappedEmulator(visible=False,delay=results.sleep)
 else:
 	whine('ULTRA Hacker Movie Mode\t: Disabled',kind='info')
-	em = WrappedEmulator(delay=results.sleep)
+	em = WrappedEmulator(visible=False,delay=results.sleep)
 if results.quiet:
 	whine('Quiet Mode Enabled\t: Shhhhhhhhh!',type='warn')
 
