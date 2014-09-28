@@ -45,7 +45,7 @@ def connect_zOS(em, target):
 # Define and fetch commandline arguments
 parser = argparse.ArgumentParser(description='z/OS Mainframe Screenshotter', epilog='Get to it!')
 parser.add_argument('-t', '--target', help='Target IP address or Hostname and port: TARGET[:PORT] default port is 23', required=True, dest='target')
-parser.add_argument('-s', '--sleep', help='Seconds to sleep between actions (increase on slower systems). The default is 0 seconds.', default=0, type=float, dest='sleep')
+parser.add_argument('-s', '--sleep', help='Seconds to sleep between actions (increase on slower systems). The default is 0 seconds.', default=0.1, type=float, dest='sleep')
 parser.add_argument('-m', '--moviemode', help='Enables ULTRA AWESOME Movie Mode. Watch the system get hacked in real time!', default=False, dest='movie_mode', action='store_true')
 parser.add_argument('-q', '--quiet', help='Be more quieter', default=False, dest='quiet', action='store_true')
 results = parser.parse_args()
